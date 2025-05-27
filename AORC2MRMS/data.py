@@ -51,7 +51,7 @@ def make_temporal_batches(x, y):
     windowed_y = []
 
     for i in range(0, Tx - window_size + 1, stride):
-        window_x = x[i:i+window_size] # shape: (5, 9, w, h)
+        window_x = x[i:i+window_size] # shape: (5, 1, w, h)
         #window_x = window_x.reshape(18, Hx, Wx) # shape: (120, w, h)
         #window_x = np.expand_dims(window_x, axis=0)
         # dimension changes
@@ -59,11 +59,11 @@ def make_temporal_batches(x, y):
         windowed_x.append(window_x) 
 
     
-        window_y = y[i:i+window_size] # shape: (5, 1, w, h)
-        #window_y = window_y.reshape(72, Hy, Wy) # shape: (120, w, h)
-        #window_y = np.expand_dims(window_y, axis=0)
+        window_y = y[i:i+window_size] # shape: (5, 6, w, h)
+        window_y = window_y.reshape(30, Hy, Wy) # shape: (120, w, h)
+        window_y = np.expand_dims(window_y, axis=0)
         # dimension changes
-        window_y = window_y.transpose(1, 0, 2, 3) # shape: (1, 5, w, h)
+        #window_y = window_y.transpose(1, 0, 2, 3) # shape: (1, 5, w, h)
         windowed_y.append(window_y) 
 
 
