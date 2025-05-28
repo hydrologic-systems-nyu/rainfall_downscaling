@@ -1,13 +1,21 @@
 # rainfall_downscalling
 This repository contains code related to rainfall downscaling.
 
+----
+
+# datasets
+
+The data retrieval scripts are available at the following link: https://github.com/omidemam/data_retrival.git
+
+----
+
 # Initial Update
 SpateGan1.0 is the original model Luca sent me before, including some input and target samples.
 GCM2AORC is the model we have modified based on Luca's model. Input GCM daily data, and the target will be the AORC hour data. The data folder includes the training data for the month of 01/2005. Currenrtly, we are trying to do no downscaling by using this model.
 AORC2AORC is trying to downscale from coarsen of AORC's 4-hours data to AORC's 1-hour data.
 AORC2MRMS is trying to downscale from dataset of AORC's hourly data to MRMS's 10mins data.
 
-
+----
 
 ## Acknowledgements
 
