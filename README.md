@@ -1,10 +1,11 @@
 # rainfall_downscalling
 This repository contains code related to rainfall downscaling.
 
-# Initial Update
+# Recent Updates
 SpateGan1.0 is the original model Luca sent me before, including some input and target samples.
 GCM2AORC is the model we have modified based on Luca's model. Input GCM daily data, and the target will be the AORC hour data. The data folder includes the training data for the month of 01/2005. Currenrtly, we are trying to do no downscaling by using this model.
-AORC2AORC is trying to downscale from coarsen of AORC's 4-hours data to AORC's 1-hour data.
+AORC2AORC1.0 is trying to downscale from coarsen of AORC's 4-hours data to AORC's 1-hour data.
+AORC 2AC2.0 is modified based on AORC 2AC1.0, and the model will be trained on the AORC2AORC dataset from 1971 to 2011. Downscaling the temporal from daily to 6-hour, and the spatial factor will be set as 6. The results will be saved as sliding windows over time.
 AORC2MRMS is trying to downscale from dataset of AORC's hourly data to MRMS's 10mins data.
 
 
