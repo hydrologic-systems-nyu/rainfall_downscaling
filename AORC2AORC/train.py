@@ -40,15 +40,6 @@ def weighted_ecdf_loss(predicted, rainfall):
     weighted_loss_image = loss_image * weight_image
     return torch.mean(weighted_loss_image)
 
-def weighted_l1_loss(pred, target, rain_threshold=1.0, rain_weight=5.0, dry_weight=1.0):
-    # Create weight mask: more weight if the target has rain
-    weight = torch.where(target > rain_threshold,
-                         torch.tensor(rain_weight, device=target.device),
-                         torch.tensor(dry_weight, device=target.device))
-    
-    loss = (weight * torch.abs(pred - target)).mean()
-    return loss
-
 def validation(G, input_image, target):
     ensemble_size = 1
     batch_split = 1
@@ -113,14 +104,14 @@ def validation(G, input_image, target):
     return fss
 
 
-def train(G, D, batch_size, gen_opt, disc_opt, scaler, criterion, input_, target_, device):
+def train(G, D, batch_size, gen_opt, disc_opt, scaler, criterion, input_, target_, device, save_dir):
     full_step = 0
     perm = np.random.permutation(input_.shape[0])
     x_lr = input_[perm]
     x_hr = target_[perm]
     G.train()
     D.train()
-    loss_epoch = 0
+    loss_ = 0
     for i in tqdm(range(0, len(x_lr), batch_size)):
     #for i in range(0, len(x_lr), batch_size):
         input_image = torch.as_tensor(x_lr[i:i+batch_size], device=device).float()            
@@ -142,11 +133,9 @@ def train(G, D, batch_size, gen_opt, disc_opt, scaler, criterion, input_, target
             disc_fake_output = D(input_image, ensemble_mean)
             gen_gan_loss = criterion(disc_fake_output, torch.ones_like(disc_fake_output))
                 
-            # can also be changed to crps loss, using the indv. ensemble members
-            #l1loss = weighted_l1_loss(ensemble_mean, target)
-            #l1loss = nn.L1Loss()(ensemble_mean, target)
-            l1loss = weighted_ecdf_loss(ensemble_mean, target)
-            loss_epoch = loss_epoch + l1loss
+            l1loss = nn.L1Loss()(ensemble_mean, target)
+            #l1loss = weighted_ecdf_loss(ensemble_mean, target)
+            loss_ = loss_ + l1loss
 
             loss = (l1loss * 1.0 + gen_gan_loss)
         scaler.scale(loss).backward()
@@ -179,8 +168,8 @@ def train(G, D, batch_size, gen_opt, disc_opt, scaler, criterion, input_, target
         full_step = full_step + 1
         if full_step % (30) == 0:
             validation(G, input_image, target)
-            torch.save(G.state_dict(), 'model_weights/models_aorc_aorc_ecdfloss.pth')
-    return loss_epoch
+            torch.save(G.state_dict(), save_dir)
+    return loss_
 
 
 

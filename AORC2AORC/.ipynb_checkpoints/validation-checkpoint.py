@@ -1,6 +1,6 @@
 import os
 import torch
-from model import Generator  
+from model import Generator
 from train import train
 #from train_profile import train
 from model import Generator, Discriminator
@@ -19,13 +19,13 @@ import argparse
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(device)
 
-def get_data(year, end_year, cotinuous_year, input_source, target_source, mode):
+def get_data(year, end_year, cotinuous_year, input_source, target_source, mode, temporal_factor, spatial_factor):
     input = []
     if mode == 'GCM':
         for y in range(year, year + cotinuous_year):
             if y > end_year:
                 break
-            x = readFile(f'/scratch/jl14811/{input_source}/pr_{y}*.nc', 'pr', 1, 21, 31) * 3600
+            x = readFile(f'{input_source}/pr_{y}*.nc', 'pr', 1, 21, 31) * 3600
             if x.shape[0] == 366:
                 x = np.delete(x, 59, axis=0)
             input.append(x)
@@ -33,7 +33,7 @@ def get_data(year, end_year, cotinuous_year, input_source, target_source, mode):
         for y in range(year, year + cotinuous_year):
             if y > end_year:
                 break
-            x = readFile(f'/scratch/jl14811/{input_source}/APCP_surface_{y}*.nc', 'APCP_surface', 24, 21, 31)
+            x = readFile(f'{input_source}/APCP_surface_{y}*.nc', 'APCP_surface', 24, 21, 31)
             x = x.reshape(-1, 1, 24, 21, 31).sum(axis=2) / 24
             if x.shape[0] == 366:
                 x = np.delete(x, 59, axis=0)
@@ -47,8 +47,14 @@ def get_data(year, end_year, cotinuous_year, input_source, target_source, mode):
     for y in range(year, year + cotinuous_year):
         if y > end_year:
             break
-        x = readFile(f'/scratch/jl14811/{target_source}/APCP_surface_{y}*.nc', 'APCP_surface', 24, 126, 186)
-        x = x.reshape(-1, 4, 6, 126, 186).sum(axis=2) / 6
+        x = readFile(f'{target_source}/APCP_surface_{y}*.nc', 'APCP_surface', 24, 126, 186)
+        x = x.reshape(-1, temporal_factor, 24 // temporal_factor, 126, 186).sum(axis=2) / (24 // temporal_factor)
+        ############### coarsen ###############
+        factor = 6 // spatial_factor
+        B, C, H, W = x.shape
+        H_new, W_new = H // factor, W // factor
+        x = x.reshape(B, C, H_new, factor, W_new, factor).mean(axis=(3,5))
+        #######################################
         if x.shape[0] == 366:
             x = np.delete(x, 59, axis=0)
         target.append(x)
@@ -58,7 +64,7 @@ def get_data(year, end_year, cotinuous_year, input_source, target_source, mode):
     print(target.shape)
     
     
-    input, target = make_temporal_batches(input, target, True)
+    input, target = make_temporal_batches(input, target, temporal_factor)
     print(input.shape)
     print(target.shape)
     return input, target
@@ -132,16 +138,23 @@ if __name__ == "__main__":
     parser.add_argument('--mode', type=str, default='AORC', help='Date increment step in days (default=3)')
     parser.add_argument('--validation_file', type=str, default='validation', help='Date increment step in days (default=3)')
 
-    args = parser.parse_args()
 
-    model = Generator().to(device)
+    
+    parser.add_argument('--temporal_factor', type=int, default=1, help='temporal_downscale_factor')
+    parser.add_argument('--spatial_factor', type=int, default=1, help='spatial_downscale_factor')
+
+    
+
+    args = parser.parse_args()
+    model = Generator(temporal_factor=args.temporal_factor, spatial_factor=args.spatial_factor).to(device)
     model.load_state_dict(torch.load(args.model_path))
     model.eval()
 
     for year in range(args.start_year, args.end_year + 1, args.cotinuous_year):
         print(year)
         start_date = datetime.date(year, 1, 2)
-        input, target = get_data(year, args.end_year, args.cotinuous_year, args.input_source, args.target_source, mode=args.mode)
+        input, target = get_data(year, args.end_year, args.cotinuous_year, args.input_source, args.target_source, args.mode, 
+                                 args.temporal_factor, args.spatial_factor)
         x = torch.tensor(input, device=device).float()
         y = torch.tensor(target, device=device).float()
         for i in range(0, x.shape[0], 1):

@@ -95,10 +95,12 @@ class Interpolate(nn.Module):
 
 
 class Generator(nn.Module):
-    def __init__(self, filter_size: int = 128):
+    def __init__(self, filter_size: int = 128, temporal_factor=1, spatial_factor=1):
         super().__init__()
 
         self.filter_size = filter_size
+        self.temporal_factor = temporal_factor
+        self.spatial_factor = spatial_factor
         self._initialize_layers()
         
 
@@ -123,16 +125,38 @@ class Generator(nn.Module):
             nn.ReLU(inplace=True)
         )
 
-        self.up0 = Interpolate((1, 2, 2))
+        ###### interpolate 1 ######
+        if self.temporal_factor == 2 or self.temporal_factor == 6 or self.temporal_factor == 4:
+            self.up0 = Interpolate((2, 1, 1))
+        else:
+            self.up0 = Interpolate((1, 1, 1))
         self.res4 = ResidualBlock3D(f, f, padding_type=True)
 
-        self.up1 = Interpolate((2, 1, 1))
+        ###### interpolate 2 ######
+        if self.temporal_factor == 3 or self.temporal_factor == 6:
+            self.up1 = Interpolate((3, 1, 1))
+        elif self.temporal_factor == 4:
+            self.up1 = Interpolate((2, 1, 1))
+        else:
+            self.up1 = Interpolate((1, 1, 1))
         self.res5 = ResidualBlock3D(f, f, padding_type=True)
 
-        self.up2 = Interpolate((1, 3, 3))
+
+        ###### interpolate 3 ######
+        if self.spatial_factor == 2 or self.spatial_factor == 6 or self.spatial_factor == 4:
+            self.up2 = Interpolate((1, 2, 2))
+        else:
+            self.up2 = Interpolate((1, 1, 1))
         self.res6 = ResidualBlock3D(f, f, padding_type=True)
 
-        self.up3 = Interpolate((2, 1, 1))
+
+        ###### interpolate 4 ######
+        if self.spatial_factor == 3 or self.spatial_factor == 6:
+            self.up3 = Interpolate((1, 3, 3))
+        elif self.spatial_factor == 4:
+            self.up3 = Interpolate((1, 2, 2))
+        else:
+            self.up3 = Interpolate((1, 1, 1))
         self.res7 = ResidualBlock3D(f, f, padding_type=True)
 
         self.res8 = ResidualBlock3D(f, f, padding_type=True)
@@ -243,18 +267,18 @@ class Generator(nn.Module):
             nvtx.range_pop()
 
 
-        ### optional final constraint layer, like https://www.nature.com/articles/s42256-022-00540-1 or https://doi.org/10.48550/arXiv.2411.16098
         
-        return output[:, :, 4:-4, :, :]
+        return output[:, :, self.temporal_factor:-self.temporal_factor, :, :]
     
     
 
 class Discriminator(nn.Module):
-    def __init__(self, filter_size: int = 128):
+    def __init__(self, filter_size: int = 128, temporal_factor=1, spatial_factor=1):
         super(Discriminator, self).__init__()
         self.apply(self._init_weights)
         f = filter_size
-
+        self.temporal_factor = temporal_factor
+        self.spatial_factor = spatial_factor
         '''normalization layer'''
         self.input_bn_x = nn.BatchNorm3d(num_features=1)
         self.input_bn_y = nn.BatchNorm3d(num_features=1)
@@ -263,11 +287,32 @@ class Discriminator(nn.Module):
         self.int_reflection = nn.ReflectionPad3d((1, 1, 1, 1, 0, 0))
 
         # HIGH RESOLUTION layers:
-        self.conv1 = ResidualBlock3D(1, f, use_layer_norm=False, stride=(1,3,3), )
-        self.conv2 = ResidualBlock3D(f, f, use_layer_norm=True, stride=(2,1,1),)
-        self.conv3 = ResidualBlock3D(f, f, use_layer_norm=True, stride=(1,2,2), )
-        self.conv4 = ResidualBlock3D(f, f, use_layer_norm=True, stride=(2,1,1), )
-        self.conv5 = ResidualBlock3D(f, f//2, use_layer_norm=True, stride=(1,1,1), )
+        self.conv1 = ResidualBlock3D(1, f, use_layer_norm=False, stride=(1,1,1), )
+
+        ######## conv2 ##########
+        if temporal_factor == 2 or temporal_factor == 4 or temporal_factor == 6:
+            self.conv2 = ResidualBlock3D(f, f, use_layer_norm=True, stride=(2,1,1),)
+        else:
+            self.conv2 = ResidualBlock3D(f, f, use_layer_norm=True, stride=(1,1,1),)
+        ######## conv3 ##########
+        if temporal_factor == 3 or temporal_factor == 6:
+            self.conv3 = ResidualBlock3D(f, f, use_layer_norm=True, stride=(3,1,1), )
+        elif temporal_factor == 4:
+            self.conv3 = ResidualBlock3D(f, f, use_layer_norm=True, stride=(2,1,1), )
+        else:
+            self.conv3 = ResidualBlock3D(f, f, use_layer_norm=True, stride=(1,1,1), )
+        ######### con4 ##########
+        if spatial_factor == 2 or spatial_factor == 4 or spatial_factor == 6:
+            self.conv4 = ResidualBlock3D(f, f, use_layer_norm=True, stride=(1,2,2), )
+        else:
+            self.conv4 = ResidualBlock3D(f, f, use_layer_norm=True, stride=(1,1,1), )
+        ######### con5 ##########
+        if spatial_factor == 3 or spatial_factor == 6:
+            self.conv5 = ResidualBlock3D(f, f//2, use_layer_norm=True, stride=(1,3,3), )
+        elif spatial_factor == 4:
+            self.conv5 = ResidualBlock3D(f, f//2, use_layer_norm=True, stride=(1,2,2), )
+        else:
+            self.conv5 = ResidualBlock3D(f, f//2, use_layer_norm=True, stride=(1,1,1), )
         
         
         # LOW RESOLUTION layers

@@ -13,22 +13,28 @@ from einops import rearrange
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(device)
 
-def get_data(year):
+def get_data(year, input_source, target_source, temporal_factor, spatial_factor):
 
-    input = readFile(f'/scratch/jl14811/AORC_1981-2011/AORC_21_31/APCP_surface_{year}*.nc', 'APCP_surface', 24, 21, 31)
+    input = readFile(f'{input_source}/APCP_surface_{year}*.nc', 'APCP_surface', 24, 21, 31)
     input = input.reshape(-1, 1, 24, 21, 31).sum(axis=2) / 24
     mean_val = np.nanmean(input)
     input = np.where(np.isnan(input), 0.0, input)
     print(input.shape)
     
-    target = readFile(f'/scratch/jl14811/AORC_1981-2011/AORC_126_186/APCP_surface_{year}*.nc', 'APCP_surface', 24, 126, 186)
-    target = target.reshape(-1, 4, 6, 126, 186).sum(axis=2) / 6
+    target = readFile(f'{target_source}/APCP_surface_{year}*.nc', 'APCP_surface', 24, 126, 186)
+    target = target.reshape(-1, temporal_factor, 24 // temporal_factor, 126, 186).sum(axis=2) / (24 // temporal_factor)
+    ############### coarsen #############
+    factor = 6 // spatial_factor
+    B, C, H, W = target.shape
+    H_new, W_new = H // factor, W // factor
+    target = target.reshape(B, C, H_new, factor, W_new, factor).mean(axis=(3,5))
+    #####################################
     mean_val = np.nanmean(target)
     target = np.where(np.isnan(target), 0.0, target)
     print(target.shape)
     
     
-    input, target = make_temporal_batches(input, target, True)
+    input, target = make_temporal_batches(input, target, temporal_factor)
     print(input.shape)
     print(target.shape)
     return input, target
@@ -36,24 +42,29 @@ def get_data(year):
 
 
 ''' parameter: epochs, loss_function, optimizer, batch_size. '''
-epochs=60
+epochs=30
 batch_size=4
+temporal_factor = 4
+spatial_factor = 6
 scaler = torch.amp.GradScaler()
 criterion = torch.nn.BCEWithLogitsLoss()
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-G = Generator().to(device)
-D = Discriminator().to(device)
+G = Generator(temporal_factor=temporal_factor, spatial_factor=spatial_factor).to(device)
+D = Discriminator(temporal_factor=temporal_factor, spatial_factor=spatial_factor).to(device)
 gen_opt = optim.AdamW(G.parameters(), lr=1e-4, betas=(0.0, 0.999))
 disc_opt = optim.AdamW(D.parameters(), lr=2e-4, betas=(0.0, 0.5))
+input_source = '/scratch/jl14811/AORC_1981-2011/AORC_21_31'
+target_source = '/scratch/jl14811/AORC_1981-2011/AORC_126_186'
+save_dir = 'model_weights/models_aorc_aorc_6-3(test).pth'
 
 for epoch in range(0, epochs):
+    loss_epoch = 0.0
     for year in range(1981, 2012, 1):
-        loss_ = 0.0
         print(f'This is the {epoch}, and it is training the year of {year}.')
-        input, target = get_data(year)
-        loss_epoch = train(G, D, batch_size, gen_opt, disc_opt, scaler, criterion, input, target, device)
-        loss_ = loss_ + loss_epoch
-        print(f'epoch:{epoch}, loss:{loss_:.5f}')
+        input, target = get_data(year, input_source, target_source, temporal_factor, spatial_factor)
+        loss_ = train(G, D, batch_size, gen_opt, disc_opt, scaler, criterion, input, target, device, save_dir)
+        loss_epoch = loss_ + loss_epoch
+        print(f'epoch:{epoch}, loss:{loss_epoch:.5f}')
         
 
 
